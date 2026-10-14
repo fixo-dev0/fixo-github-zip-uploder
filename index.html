@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ZIP → GitHub Uploader | Fixo Dev</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+:root {
+  --bg: #07030f;
+  --bg2: #0d0620;
+  --pink: #ff2e88;
+  --pink-soft: #ff7ab8;
+  --cyan: #00e5ff;
+  --purple: #a855f7;
+  --violet: #7c3aed;
+  --green: #34d399;
+  --red: #ff4d6d;
+  --text: #eae6ff;
+  --muted: #9b93c4;
+  --glass: rgba(22, 12, 44, 0.55);
+  --glass-border: rgba(168, 85, 247, 0.25);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding: 22px 18px 10px;
+  max-width: 520px;
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ============ ANIMATED BACKGROUND ============ */
+.bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(168, 85, 247, 0.22), transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(0, 229, 255, 0.16), transparent 45%),
+    radial-gradient(circle at 50% 100%, rgba(255, 46, 136, 0.18), transparent 55%),
+    linear-gradient(160deg, #07030f 0%, #0d0620 45%, #120726 100%);
+}
+
+.bg-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(168,85,247,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168,85,247,0.05) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 78%);
+  animation: gridDrift 24s linear infinite;
+}
+
+@keyframes gridDrift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 42px 42px, 42px 42px; }
+}
+
+.orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.45;
+  z-index: -1;
+  pointer-events: none;
+  animation: orbFloat 18s ease-in-out infinite;
+}
+.orb.o1 { width: 260px; height: 260px; background: var(--purple); top: -80px; left: -90px; }
+.orb.o2 { width: 220px; height: 220px; background: var(--cyan); top: 35%; right: -110px; animation-delay: -6s; }
+.orb.o3 { width: 240px; height: 240px; background: var(--pink); bottom: -90px; left: 20%; animation-delay: -12s; }
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(30px, -30px) scale(1.12); }
+  66%      { transform: translate(-25px, 25px) scale(0.92); }
+}
+
+/* ============ SAKURA PETALS ============ */
+.petal {
+  position: fixed;
+  top: -8vh;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 14px 0 14px 0;
+  background: linear-gradient(135deg, #ffb3d9, #ff2e88);
+  opacity: 0.65;
+  filter: drop-shadow(0 0 6px rgba(255, 46, 136, 0.6));
+  animation: petalFall linear infinite;
+}
+
+@keyframes petalFall {
+  0%   { transform: translateY(-10vh) translateX(0) rotate(0deg); opacity: 0; }
+  10%  { opacity: 0.7; }
+  90%  { opacity: 0.6; }
+  100% { transform: translateY(112vh) translateX(90px) rotate(680deg); opacity: 0; }
+}
+
+/* ============ LOADING SCREEN ============ */
+#loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  background: radial-gradient(circle at 50% 45%, #150a2c 0%, #07030f 70%);
+  transition: opacity 0.7s ease, visibility 0.7s ease;
+}
+#loader.hidden { opacity: 0; visibility: hidden; }
+
+.loader-ring {
+  position: relative;
+  width: 110px;
+  height: 110px;
+}
+.loader-ring::before,
+.loader-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+}
+.loader-ring::before {
+  border-top-color: var(--pink);
+  border-right-color: var(--purple);
+  animation: spin 1s linear infinite;
+  box-shadow: 0 0 24px rgba(255, 46, 136, 0.55);
+}
+.loader-ring::after {
+  inset: 14px;
+  border-bottom-color: var(--cyan);
+  border-left-color: var(--violet);
+  animation: spin 1.5s linear infinite reverse;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.45);
+}
+
+.loader-core {
+  position: absolute;
+  inset: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--pink) 0%, var(--purple) 60%, transparent 72%);
+  animation: pulseCore 1.4s ease-in-out infinite;
+}
+
+@keyframes pulseCore {
+  0%, 100% { transform: scale(0.8); opacity: 0.75; }
+  50%      { transform: scale(1.15); opacity: 1; }
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loader-text {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  letter-spacing: 5px;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--pink), var(--cyan), var(--pink));
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine 2.4s linear infinite;
+}
+
+@keyframes shine {
+  to { background-position: 220% center; }
+}
+
+.loader-bar {
+  width: 170px;
+  height: 3px;
+  border-radius: 4px;
+  background: rgba(168, 85, 247, 0.18);
+  overflow: hidden;
+}
+.loader-bar span {
+  display: block;
+  height: 100%;
+  width: 40%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--pink), var(--cyan));
+  box-shadow: 0 0 12px var(--pink);
+  animation: loaderSlide 1.15s ease-in-out infinite;
+}
+@keyframes loaderSlide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* ============ CONTENT ============ */
+.container {
+  position: relative;
+  z-index: 2;
+  animation: fadeUp 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0.15s;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.header { text-align: center; margin-bottom: 26px; }
+
+h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  margin: 0 0 8px;
+  background: linear-gradient(100deg, var(--pink) 0%, var(--purple) 40%, var(--cyan) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine 4s linear infinite;
+  filter: drop-shadow(0 0 18px rgba(255, 46, 136, 0.35));
+}
+
+.subtitle {
+  font-size: 12.5px;
+  color: var(--muted);
+  letter-spacing: 0.4px;
+  margin: 0;
+}
+
+.subtitle .dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-right: 6px;
+  box-shadow: 0 0 10px var(--green);
+  animation: blink 1.6s ease-in-out infinite;
+  vertical-align: middle;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.7); }
+}
+
+/* ============ CARD ============ */
+.card {
+  position: relative;
+  border-radius: 22px;
+  padding: 22px 18px;
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.4px;
+  background: conic-gradient(from var(--angle),
+    var(--pink), var(--purple), var(--cyan), var(--violet), var(--pink));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: spinBorder 7s linear infinite;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+@keyframes spinBorder {
+  to { --angle: 360deg; }
+}
+
+/* ============ FORM ============ */
+.field { margin-bottom: 17px; }
+
+label.lbl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--pink-soft);
+}
+
+label.lbl .ico { font-size: 14px; }
+
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 14px 15px;
+  border-radius: 13px;
+  border: 1.5px solid rgba(168, 85, 247, 0.28);
+  background: rgba(10, 5, 22, 0.75);
+  color: var(--text);
+  font-size: 15px;
+  font-family: 'Poppins', sans-serif;
+  transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s, background 0.25s;
+}
+
+input[type="text"]::placeholder,
+input[type="password"]::placeholder { color: #5c5480; }
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+  outline: none;
+  border-color: var(--pink);
+  background: rgba(16, 8, 34, 0.9);
+  box-shadow: 0 0 0 3px rgba(255, 46, 136, 0.14), 0 0 22px rgba(255, 46, 136, 0.28);
+  transform: translateY(-1px);
+}
+
+/* ============ FILE PICKER ============ */
+.file-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 24px 16px;
+  border-radius: 15px;
+  border: 2px dashed rgba(168, 85, 247, 0.45);
+  background: rgba(10, 5, 22, 0.6);
+  color: var(--muted);
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.file-btn .big-ico {
+  font-size: 26px;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.file-btn:hover,
+.file-btn:active {
+  border-color: var(--pink);
+  background: rgba(255, 46, 136, 0.07);
+  box-shadow: 0 0 26px rgba(255, 46, 136, 0.22);
+}
+.file-btn:hover .big-ico { transform: translateY(-4px) scale(1.12); }
+
+.file-btn.has-file {
+  border-style: solid;
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(52, 211, 153, 0.08);
+  box-shadow: 0 0 26px rgba(52, 211, 153, 0.2);
+}
+
+input[type="file"] { display: none; }
+
+.filename {
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--green);
+  text-align: center;
+  word-break: break-all;
+  min-height: 16px;
+  letter-spacing: 0.3px;
+}
+
+/* ============ TOGGLE SWITCH ============ */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 13px 15px;
+  border-radius: 13px;
+  background: rgba(10, 5, 22, 0.55);
+  border: 1px solid rgba(168, 85, 247, 0.18);
+}
+
+.switch-row .txt {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.switch-row .txt b { color: var(--text); font-weight: 600; display: block; font-size: 13px; }
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 50px;
+  height: 27px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  border-radius: 30px;
+  background: rgba(90, 78, 130, 0.45);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  transition: 0.35s;
+}
+.slider::before {
+  content: '';
+  position: absolute;
+  height: 19px; width: 19px;
+  left: 3px; top: 3px;
+  border-radius: 50%;
+  background: #cfc6f0;
+  transition: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.switch input:checked + .slider {
+  background: linear-gradient(90deg, var(--pink), var(--purple));
+  box-shadow: 0 0 16px rgba(255, 46, 136, 0.55);
+  border-color: transparent;
+}
+.switch input:checked + .slider::before {
+  transform: translateX(23px);
+  background: #fff;
+}
+
+/* ============ UPLOAD BUTTON ============ */
+button.upload {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  padding: 17px;
+  margin-top: 22px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(100deg, var(--pink), var(--purple) 55%, var(--cyan));
+  background-size: 220% auto;
+  color: #fff;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(255, 46, 136, 0.32);
+  transition: transform 0.2s, box-shadow 0.3s, background-position 0.6s;
+}
+
+button.upload:hover:not(:disabled) {
+  background-position: right center;
+  box-shadow: 0 12px 40px rgba(168, 85, 247, 0.5);
+  transform: translateY(-2px);
+}
+button.upload:active:not(:disabled) { transform: translateY(0) scale(0.985); }
+
+button.upload::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -120%;
+  width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+  transform: skewX(-22deg);
+  animation: btnShine 3.2s ease-in-out infinite;
+}
+@keyframes btnShine {
+  0%   { left: -120%; }
+  55%  { left: 130%; }
+  100% { left: 130%; }
+}
+
+button.upload:disabled {
+  background: rgba(60, 52, 88, 0.5);
+  color: #6d6494;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+button.upload:disabled::after { display: none; }
+
+/* ============ PROGRESS ============ */
+.progress {
+  margin-top: 14px;
+  height: 8px;
+  background: rgba(60, 52, 88, 0.5);
+  border-radius: 6px;
+  overflow: hidden;
+  display: none;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+.progress.active { display: block; animation: fadeUp 0.4s ease both; }
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--pink), var(--purple), var(--cyan));
+  background-size: 200% auto;
+  box-shadow: 0 0 14px rgba(255, 46, 136, 0.7);
+  transition: width 0.35s ease;
+  animation: shine 1.6s linear infinite;
+}
+
+/* ============ STATUS ============ */
+#status {
+  margin-top: 18px;
+  padding: 15px;
+  border-radius: 14px;
+  background: rgba(10, 5, 22, 0.72);
+  border: 1px solid rgba(168, 85, 247, 0.18);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  font-family: 'Poppins', sans-serif;
+}
+
+#status::-webkit-scrollbar { width: 5px; }
+#status::-webkit-scrollbar-track { background: transparent; }
+#status::-webkit-scrollbar-thumb {
+  background: linear-gradient(var(--pink), var(--purple));
+  border-radius: 4px;
+}
+
+#status.success { border-color: rgba(52, 211, 153, 0.5); color: var(--green); box-shadow: 0 0 22px rgba(52, 211, 153, 0.16); }
+#status.error   { border-color: rgba(255, 77, 109, 0.5); color: var(--red);   box-shadow: 0 0 22px rgba(255, 77, 109, 0.16); }
+#status.info    { border-color: rgba(0, 229, 255, 0.35); color: #8fd8ff; }
+#status.loading { border-color: rgba(255, 200, 60, 0.45); color: #ffd166; box-shadow: 0 0 22px rgba(255, 200, 60, 0.14); }
+
+/* ============ FOOTER ============ */
+footer {
+  margin-top: 34px;
+  padding: 22px 0 30px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+footer .dev {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  background: linear-gradient(90deg, var(--pink), var(--cyan), var(--pink));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine 3.5s linear infinite;
+}
+
+footer .heart {
+  display: inline-block;
+  color: var(--pink);
+  animation: heartBeat 1.5s ease-in-out infinite;
+}
+@keyframes heartBeat {
+  0%, 100% { transform: scale(1); }
+  25%      { transform: scale(1.28); }
+  50%      { transform: scale(1); }
+}
+
+footer .line {
+  width: 60px;
+  height: 2px;
+  margin: 0 auto 14px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--purple), var(--pink), var(--purple), transparent);
+  animation: shine 3s linear infinite;
+  background-size: 200% auto;
+}
+</style>
+</head>
+<body>
+
+<!-- ===== ANIMATED BACKGROUND ===== -->
+<div class="bg-layer"></div>
+<div class="orb o1"></div>
+<div class="orb o2"></div>
+<div class="orb o3"></div>
+
+<!-- ===== LOADING SCREEN ===== -->
+<div id="loader">
+  <div class="loader-ring">
+    <div class="loader-core"></div>
+  </div>
+  <div class="loader-text">LOADING</div>
+  <div class="loader-bar"><span></span></div>
+</div>
+
+<!-- ===== CONTENT ===== -->
+<div class="container">
+
+  <div class="header">
+    <h1>🗜️ ZIP → GITHUB</h1>
+    <p class="subtitle"><span class="dot"></span>Extract &amp; push straight to your repo root</p>
+  </div>
+
+  <div class="card">
+
+    <div class="field">
+      <label class="lbl" for="token"><span class="ico">🔐</span> GitHub Token</label>
+      <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxx" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label class="lbl" for="repo"><span class="ico">📦</span> Repository</label>
+      <input type="text" id="repo" placeholder="username/repository" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label class="lbl" for="branch"><span class="ico">🌿</span> Branch</label>
+      <input type="text" id="branch" value="main" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label class="lbl"><span class="ico">🗜️</span> Select ZIP File</label>
+      <label for="file" class="file-btn" id="fileBtn">
+        <span class="big-ico">📎</span>
+        <span id="fileBtnText">Tap to choose a ZIP file</span>
+      </label>
+      <input type="file" id="file" accept=".zip,application/zip">
+      <div class="filename" id="filename"></div>
+    </div>
+
+    <div class="switch-row">
+      <div class="txt">
+        <b>Strip root folder</b>
+        Remove the top-level folder inside the ZIP
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="stripRoot">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <button class="upload" id="uploadBtn" onclick="uploadZip()">🚀 EXTRACT &amp; PUSH</button>
+
+    <div class="progress" id="progress">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div id="status" class="info">Ready... 🟢</div>
+
+  </div>
+
+  <footer>
+    <div class="line"></div>
+    <span class="heart">❤</span> Developed by <span class="dev">FIXO DEV</span>
+  </footer>
+
+</div>
+
+<script>
+const API = 'https://api.github.com';
+
+/* ================= LOADING SCREEN ================= */
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const loader = document.getElementById('loader');
+    loader.classList.add('hidden');
+    setTimeout(() => loader.remove(), 800);
+  }, 1400);
+});
+
+/* ================= SAKURA PETALS ================= */
+(function createPetals() {
+  const count = window.innerWidth < 520 ? 12 : 20;
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('div');
+    p.className = 'petal';
+    const size = 6 + Math.random() * 9;
+    p.style.width = size + 'px';
+    p.style.height = size + 'px';
+    p.style.left = Math.random() * 100 + 'vw';
+    p.style.animationDuration = (9 + Math.random() * 11) + 's';
+    p.style.animationDelay = (-Math.random() * 18) + 's';
+    p.style.opacity = (0.25 + Math.random() * 0.5).toFixed(2);
+    document.body.appendChild(p);
+  }
+})();
+
+/* ================= SETTINGS SAVE/LOAD ================= */
+const saved = JSON.parse(localStorage.getItem('gh_settings') || '{}');
+if (saved.repo)   document.getElementById('repo').value   = saved.repo;
+if (saved.branch) document.getElementById('branch').value = saved.branch;
+if (saved.token)  document.getElementById('token').value  = saved.token;
+
+['token', 'repo', 'branch'].forEach(id => {
+  document.getElementById(id).addEventListener('change', saveSettings);
+});
+
+function saveSettings() {
+  localStorage.setItem('gh_settings', JSON.stringify({
+    token:  document.getElementById('token').value,
+    repo:   document.getElementById('repo').value,
+    branch: document.getElementById('branch').value
+  }));
+}
+
+/* ================= FILE SELECT ================= */
+const fileInput   = document.getElementById('file');
+const fileBtn     = document.getElementById('fileBtn');
+const fileBtnText = document.getElementById('fileBtnText');
+const filenameEl  = document.getElementById('filename');
+
+fileInput.addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (f) {
+    fileBtnText.textContent = '✅ ' + f.name;
+    fileBtn.classList.add('has-file');
+    filenameEl.textContent = `${(f.size / 1024).toFixed(1)} KB ready to upload`;
+  } else {
+    fileBtnText.textContent = 'Tap to choose a ZIP file';
+    fileBtn.classList.remove('has-file');
+    filenameEl.textContent = '';
+  }
+});
+
+/* ================= UI HELPERS ================= */
+function setStatus(msg, type = 'info') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type;
+}
+
+function appendStatus(msg) {
+  const el = document.getElementById('status');
+  el.textContent += '\n' + msg;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setProgress(pct) {
+  const p = document.getElementById('progress');
+  const b = document.getElementById('progressBar');
+  if (pct === null) { p.classList.remove('active'); return; }
+  p.classList.add('active');
+  b.style.width = pct + '%';
+}
+
+/* ================= BASE64 (binary safe) ================= */
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+/* ================= GITHUB HELPERS ================= */
+async function getFileSha(repo, path, branch, headers) {
+  const res = await fetch(
+    `${API}/repos/${repo}/contents/${encodeURIComponent(path).replace(/%2F/g, '/')}?ref=${branch}`,
+    { headers }
+  );
+  if (res.ok) {
+    const data = await res.json();
+    return data.sha;
+  }
+  return null;
+}
+
+async function putFile(repo, path, content, branch, headers, sha) {
+  const body = {
+    message: `Upload ${path} via ZIP from mobile`,
+    content: content,
+    branch: branch
+  };
+  if (sha) body.sha = sha;
+
+  const res = await fetch(
+    `${API}/repos/${repo}/contents/${encodeURIComponent(path).replace(/%2F/g, '/')}`,
+    {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(body)
+    }
+  );
+  return { ok: res.ok, status: res.status, data: await res.json() };
+}
+
+/* ================= MAIN: UPLOAD ZIP ================= */
+async function uploadZip() {
+  const token     = document.getElementById('token').value.trim();
+  const repo      = document.getElementById('repo').value.trim();
+  const branch    = document.getElementById('branch').value.trim() || 'main';
+  const file      = fileInput.files[0];
+  const stripRoot = document.getElementById('stripRoot').checked;
+
+  if (!token || !repo || !file) {
+    setStatus('❌ Token, Repository and ZIP file are all required!', 'error');
+    return;
+  }
+  if (!file.name.toLowerCase().endsWith('.zip')) {
+    setStatus('❌ Please select a valid .zip file!', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+
+  const headers = {
+    'Authorization': `token ${token}`,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    setStatus('📦 Reading ZIP file...', 'loading');
+    setProgress(5);
+
+    const zip = await JSZip.loadAsync(file);
+
+    // Build file list (skip folders)
+    let entries = [];
+    zip.forEach((relativePath, zipEntry) => {
+      if (!zipEntry.dir) {
+        entries.push({ path: relativePath, entry: zipEntry });
+      }
+    });
+
+    if (entries.length === 0) {
+      setStatus('❌ No files found inside the ZIP!', 'error');
+      return;
+    }
+
+    // Strip root folder logic
+    if (stripRoot && entries.length > 0) {
+      const firstParts = entries.map(e => e.path.split('/'));
+      if (firstParts.every(p => p.length > 1 && p[0] === firstParts[0][0])) {
+        const rootName = firstParts[0][0];
+        entries = entries.map(e => ({
+          ...e,
+          path: e.path.substring(rootName.length + 1)
+        })).filter(e => e.path.length > 0);
+      }
+    }
+
+    setStatus(`📂 Found ${entries.length} file(s)\n\n⏳ Starting upload...`, 'loading');
+
+    let success = 0;
+    let failed  = 0;
+    const errors = [];
+
+    for (let i = 0; i < entries.length; i++) {
+      const { path, entry } = entries[i];
+      const pct = 10 + Math.round((i / entries.length) * 85);
+      setProgress(pct);
+
+      try {
+        const arrayBuffer = await entry.async('arraybuffer');
+        const base64 = arrayBufferToBase64(arrayBuffer);
+
+        const sha = await getFileSha(repo, path, branch, headers);
+        const result = await putFile(repo, path, base64, branch, headers, sha);
+
+        if (result.ok) {
+          success++;
+          appendStatus(`✅ [${i + 1}/${entries.length}] ${path}`);
+        } else {
+          failed++;
+          errors.push(`${path}: ${result.data.message}`);
+          appendStatus(`❌ [${i + 1}/${entries.length}] ${path} — ${result.data.message}`);
+        }
+      } catch (err) {
+        failed++;
+        errors.push(`${path}: ${err.message}`);
+        appendStatus(`❌ [${i + 1}/${entries.length}] ${path} — ${err.message}`);
+      }
+
+      // Small delay to be gentle with rate limits
+      if (i < entries.length - 1) {
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    setProgress(100);
+
+    if (failed === 0) {
+      setStatus(
+        `🎉 Success!\n\n✅ Pushed ${success} file(s)\n📦 Repo: ${repo}\n🌿 Branch: ${branch}`,
+        'success'
+      );
+    } else {
+      setStatus(
+        `⚠️ Finished\n\n✅ Success: ${success}\n❌ Failed: ${failed}\n\n${errors.join('\n')}`,
+        'error'
+      );
+    }
+
+  } catch (err) {
+    setStatus(`❌ ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => setProgress(null), 3000);
+  }
+}
+</script>
+
+</body>
+</html>
